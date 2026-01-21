@@ -7,16 +7,6 @@ git clone https://github.com/yourname/lightcrawl && cd lightcrawl
 ./start.sh
 ```
 
-## Why LightCrawl?
-
-|  | LightCrawl | Firecrawl OSS |
-|--|------------|---------------|
-| **Setup** | 1 command | 4 steps + config |
-| **Ready in** | 30 sec | ~15 min |
-| **RAM** | 2 GB (full) / 512 MB (minimal) | 12 GB |
-| **Config needed** | No | Yes (.env) |
-| **Works on $10 VPS** | Yes | No |
-
 ## Quick Start
 
 ```bash
