@@ -1,0 +1,119 @@
+services:
+  api:
+    build: ./services/api
+    ports:
+      - "3002:3002"
+    environment:
+      - SEARXNG_URL=http://searxng:8080
+      - REDIS_URL=redis://redis:6379
+      - SEARXNG_RATE_LIMIT=30
+      - JOB_TIMEOUT=120
+      - API_KEYS=${API_KEYS:-}
+    depends_on:
+      searxng:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  worker:
+    build: ./services/api
+    command: python -m src.worker
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - SCRAPE_CONCURRENCY=50
+      - SCRAPE_TIMEOUT=10
+      - CACHE_TTL_PAGE=86400
+      - PLAYWRIGHT_URL=http://playwright:3000
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+    restart: unless-stopped
+
+  searxng:
+    image: searxng/searxng:latest
+    volumes:
+      - ./config/searxng:/etc/searxng
+    depends_on:
+      - tor
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  tor:
+    image: dperson/torproxy:latest
+    restart: unless-stopped
+
+  # Optional: MCP server for remote LLM access (Claude Desktop, Cursor, etc.)
+  # Start with: docker compose --profile mcp up -d
+  mcp:
+    build: ./services/api
+    command: python -m src.mcp_server --sse --port 8000
+    profiles:
+      - mcp
+    ports:
+      - "8000:8000"
+    environment:
+      - LIGHTCRAWL_API_URL=http://api:3002
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # Playwright service for JavaScript rendering (SPA sites)
+  playwright:
+    build: ./services/playwright
+    profiles:
+      - playwright
+    environment:
+      - PORT=3000
+      - MAX_CONCURRENT_PAGES=10
+      - TIMEOUT=30000
+      - BLOCK_MEDIA=true
+      - PROXY_SERVER=${PROXY_SERVER:-}
+      - PROXY_USERNAME=${PROXY_USERNAME:-}
+      - PROXY_PASSWORD=${PROXY_PASSWORD:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+    restart: unless-stopped
+
+volumes:
+  redis_data:
