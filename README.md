@@ -306,7 +306,3 @@ lightcrawl/
 ├── start.sh / stop.sh / delete.sh
 └── README.md
 ```
-
-## License
-
-MIT
