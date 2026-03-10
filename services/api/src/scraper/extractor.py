@@ -63,15 +63,11 @@ def _get_random_ua() -> str:
     return random.choice(USER_AGENTS)
 
 
-def fetch_and_extract(url: str, use_playwright: bool = False) -> str:
-    """Fetch URL and extract markdown content.
-
-    Args:
-        url: URL to fetch
-        use_playwright: Force Playwright (for SPA sites)
+def fetch_and_extract(url: str, use_playwright: bool = False) -> dict:
+    """Fetch URL and extract markdown content with metadata.
 
     Returns:
-        Extracted markdown or empty string on failure
+        Dict with markdown, title, author, date, description (or empty dict on failure)
     """
     if not use_playwright:
         try:
@@ -80,8 +76,8 @@ def fetch_and_extract(url: str, use_playwright: bool = False) -> str:
             resp = client.get(url, headers={"User-Agent": _get_random_ua()})
             resp.raise_for_status()
             content = extract_content(resp.text)
-            if content:
-                logger.debug(f"Scraped {url}: {len(content)} chars")
+            if content.get("markdown"):
+                logger.debug(f"Scraped {url}: {len(content['markdown'])} chars")
                 return content
             logger.warning(f"Empty content from {url}")
         except httpx.TimeoutException:
@@ -95,18 +91,14 @@ def fetch_and_extract(url: str, use_playwright: bool = False) -> str:
     if settings.playwright_url:
         return fetch_with_playwright(url)
 
-    return ""
+    return {}
 
 
-def fetch_with_playwright(url: str, wait_after_load: int = 2000) -> str:
+def fetch_with_playwright(url: str, wait_after_load: int = 2000) -> dict:
     """Fetch URL using Playwright service for JS rendering.
 
-    Args:
-        url: URL to fetch
-        wait_after_load: Additional wait time after page load (ms)
-
     Returns:
-        Extracted markdown or empty string on failure
+        Dict with markdown and metadata (or empty dict on failure)
     """
     try:
         _wait_for_domain(url)
@@ -128,16 +120,16 @@ def fetch_with_playwright(url: str, wait_after_load: int = 2000) -> str:
 
             if page_error:
                 logger.warning(f"Playwright error for {url}: {page_error} (HTTP {status_code})")
-                return ""
+                return {}
 
             if status_code >= 400:
                 logger.warning(f"Playwright HTTP {status_code} from {url}")
-                return ""
+                return {}
 
             if content_html:
                 content = extract_content(content_html)
-                if content:
-                    logger.debug(f"Playwright scraped {url}: {len(content)} chars")
+                if content.get("markdown"):
+                    logger.debug(f"Playwright scraped {url}: {len(content['markdown'])} chars")
                     return content
 
             logger.warning(f"Playwright empty content for {url}")
@@ -145,23 +137,34 @@ def fetch_with_playwright(url: str, wait_after_load: int = 2000) -> str:
         logger.warning(f"Playwright timeout for {url}")
     except Exception as e:
         logger.error(f"Playwright error for {url}: {e}")
-    return ""
+    return {}
 
 
 MIN_CONTENT_LENGTH = 500
 
 
-def extract_content(html: str) -> str:
-    """Extract markdown from HTML. Falls back to JSON-LD articleBody if trafilatura returns too little."""
-    result = trafilatura.extract(html, include_tables=True, output_format="markdown") or ""
-    if len(result) >= MIN_CONTENT_LENGTH:
-        return result
+def extract_content(html: str) -> dict:
+    """Extract markdown + metadata from HTML. Falls back to JSON-LD articleBody for short content."""
+    doc = trafilatura.bare_extraction(html, include_tables=True, output_format="markdown")
 
-    ld_content = _extract_jsonld_body(html)
-    if ld_content and len(ld_content) > len(result):
-        return ld_content
+    if doc:
+        markdown = doc.text or ""
+        meta = {
+            "title": doc.title or None,
+            "author": doc.author or None,
+            "date": doc.date or None,
+            "description": doc.description or None,
+        }
+    else:
+        markdown = ""
+        meta = {"title": None, "author": None, "date": None, "description": None}
 
-    return result
+    if len(markdown) < MIN_CONTENT_LENGTH:
+        ld_content = _extract_jsonld_body(html)
+        if ld_content and len(ld_content) > len(markdown):
+            markdown = ld_content
+
+    return {"markdown": markdown, **meta}
 
 
 def _extract_jsonld_body(html: str) -> str:

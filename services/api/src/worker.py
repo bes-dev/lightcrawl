@@ -50,7 +50,7 @@ def process_task(task: dict) -> None:
 
     content = fetch_and_extract(url, use_playwright=task.get("use_playwright", False))
 
-    if not content:
+    if not content.get("markdown"):
         add_to_dlq(job_id, url, "Empty content", attempt)
         return
 

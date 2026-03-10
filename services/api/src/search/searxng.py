@@ -37,7 +37,7 @@ class SearXNGBackend(SearchBackend):
             )
         return self._client
 
-    async def search(self, query: str, limit: int = 10) -> list[str]:
+    async def search(self, query: str, limit: int = 10) -> list[dict]:
         if not await _rate_limit_check("searxng", settings.searxng_rate_limit):
             raise RateLimitExceeded("SearXNG rate limit exceeded")
 
@@ -51,8 +51,16 @@ class SearXNGBackend(SearchBackend):
                 )
                 resp.raise_for_status()
                 data = resp.json()
-                urls = [r["url"] for r in data.get("results", []) if r.get("url")]
-                return urls[:limit]
+                results = [
+                    {
+                        "url": r["url"],
+                        "title": r.get("title", ""),
+                        "snippet": r.get("content", ""),
+                    }
+                    for r in data.get("results", [])
+                    if r.get("url")
+                ]
+                return results[:limit]
             except httpx.HTTPStatusError as e:
                 if e.response.status_code >= 500 and attempt < 2:
                     await asyncio.sleep(2**attempt)

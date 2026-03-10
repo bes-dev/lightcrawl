@@ -43,8 +43,8 @@ async def create_job(urls: list[str], *, use_playwright: bool = False) -> str:
     return job_id
 
 
-async def get_results(job_id: str) -> list[tuple[str, str]]:
-    """Wait for job completion, return [(url, content), ...].
+async def get_results(job_id: str) -> list[tuple[str, dict]]:
+    """Wait for job completion, return [(url, content_dict), ...].
 
     Returns partial results on timeout instead of raising exception.
     """
@@ -71,7 +71,13 @@ async def get_results(job_id: str) -> list[tuple[str, str]]:
     else:
         logger.info(f"Job {job_id} completed: {len(results_raw)} results")
 
-    return [(url, content) for url, content in results_raw.items()]
+    out = []
+    for url, raw in results_raw.items():
+        try:
+            out.append((url, json.loads(raw)))
+        except (json.JSONDecodeError, TypeError):
+            out.append((url, {"markdown": raw}))
+    return out
 
 
 # --- Sync Worker (for worker process) ---
@@ -90,10 +96,10 @@ def pop_task(timeout: int = 5) -> dict | None:
     return None
 
 
-def save_result(job_id: str, url: str, content: str) -> None:
-    """Save scrape result."""
+def save_result(job_id: str, url: str, content: dict) -> None:
+    """Save scrape result as JSON."""
     r = get_sync_redis()
-    r.hset(f"job:{job_id}:results", url, content)
+    r.hset(f"job:{job_id}:results", url, json.dumps(content))
 
 
 # --- DLQ + Retry ---
@@ -159,13 +165,19 @@ def _cache_key(url: str) -> str:
     return f"page:{hashlib.md5(url.encode()).hexdigest()[:16]}"
 
 
-def get_cached_page(url: str) -> str | None:
-    """Get cached page content."""
+def get_cached_page(url: str) -> dict | None:
+    """Get cached page content dict."""
     r = get_sync_redis()
-    return r.get(_cache_key(url))
+    raw = r.get(_cache_key(url))
+    if raw is None:
+        return None
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return None
 
 
-def set_cached_page(url: str, content: str) -> None:
-    """Cache page content."""
+def set_cached_page(url: str, content: dict) -> None:
+    """Cache page content as JSON."""
     r = get_sync_redis()
-    r.setex(_cache_key(url), settings.cache_ttl_page, content)
+    r.setex(_cache_key(url), settings.cache_ttl_page, json.dumps(content))

@@ -20,26 +20,29 @@ async def health(request):
 
 
 @mcp.tool
-def web_search(query: str, limit: int = 5) -> list[dict]:
+def web_search(query: str, limit: int = 5, scrape: bool = True) -> list[dict]:
     """
     Search the web and return page content as markdown.
 
     Use this tool to find information on any topic. Returns actual page
-    content (not just snippets), extracted as clean markdown.
+    content (not just snippets), extracted as clean markdown with metadata.
 
     Args:
         query: Search query (e.g. "python async tutorial", "latest news about AI")
         limit: Number of results to return (1-20, default 5)
+        scrape: If True (default), fetch and extract full page content.
+                If False, return search snippets only (much faster).
 
     Returns:
         List of results, each containing:
         - url: Source URL
-        - markdown: Full page content as markdown
+        - markdown: Full page content (scrape=True) or snippet (scrape=False)
+        - title, author, date, description: Page metadata (when available)
     """
     limit = max(1, min(20, limit))  # Clamp to 1-20
 
     with httpx.Client(timeout=120, base_url=API_URL) as client:
-        resp = client.post("/v1/search", json={"query": query, "limit": limit})
+        resp = client.post("/v1/search", json={"query": query, "limit": limit, "scrape": scrape})
         resp.raise_for_status()
         data = resp.json()
 

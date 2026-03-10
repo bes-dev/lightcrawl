@@ -13,8 +13,8 @@ class SearchBackend(ABC):
     """
 
     @abstractmethod
-    async def search(self, query: str, limit: int = 10) -> list[str]:
-        """Search and return list of URLs."""
+    async def search(self, query: str, limit: int = 10) -> list[dict]:
+        """Search and return list of {url, title, snippet}."""
         pass
 
     async def close(self) -> None:
