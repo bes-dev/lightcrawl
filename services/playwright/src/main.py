@@ -19,9 +19,7 @@ from pydantic import BaseModel
 MAX_CONCURRENT_PAGES = int(os.getenv("MAX_CONCURRENT_PAGES", "10"))
 DEFAULT_TIMEOUT = int(os.getenv("TIMEOUT", "30000"))
 BLOCK_MEDIA = os.getenv("BLOCK_MEDIA", "true").lower() == "true"
-PROXY_SERVER = os.getenv("PROXY_SERVER")
-PROXY_USERNAME = os.getenv("PROXY_USERNAME")
-PROXY_PASSWORD = os.getenv("PROXY_PASSWORD")
+PROXY_URL = os.getenv("PROXY_URL")  # http://user:pass@host:port
 
 # Logging
 logging.basicConfig(
@@ -292,11 +290,8 @@ async def scrape(req: ScrapeRequest) -> ScrapeResponse:
         }
 
         # Add proxy if configured
-        if PROXY_SERVER:
-            context_options["proxy"] = {"server": PROXY_SERVER}
-            if PROXY_USERNAME and PROXY_PASSWORD:
-                context_options["proxy"]["username"] = PROXY_USERNAME
-                context_options["proxy"]["password"] = PROXY_PASSWORD
+        if PROXY_URL:
+            context_options["proxy"] = {"server": PROXY_URL}
 
         # Create context and page
         context = await browser.new_context(**context_options)

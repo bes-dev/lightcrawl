@@ -4,10 +4,10 @@ import json
 from fastapi import APIRouter, Depends, HTTPException
 
 from src.api.auth import verify_api_key
-from src.api.schemas import SearchRequest, SearchResponse, SearchResultItem
+from src.api.schemas import SearchRequest, SearchResponse, SearchResultItem, ScrapeRequest
 from src.search import RateLimitExceeded
 from src.search.searxng import get_search_backend
-from src.scraper.queue import create_job, get_results, JobTimeout
+from src.scraper.queue import create_job, get_results
 from src.redis_client import get_redis
 from src.config import settings
 
@@ -38,12 +38,9 @@ async def search(req: SearchRequest) -> SearchResponse:
     if not urls:
         return SearchResponse(success=True, data=[])
 
-    # Create scrape job and wait for results
-    try:
-        job_id = await create_job(urls)
-        results = await get_results(job_id)
-    except JobTimeout:
-        raise HTTPException(status_code=504, detail="Scraping timeout")
+    # Create scrape job and wait for results (returns partial on timeout)
+    job_id = await create_job(urls)
+    results = await get_results(job_id)
 
     # Build response
     data = [SearchResultItem(url=url, markdown=md) for url, md in results if md]
@@ -55,4 +52,13 @@ async def search(req: SearchRequest) -> SearchResponse:
         json.dumps([{"url": d.url, "markdown": d.markdown} for d in data]),
     )
 
+    return SearchResponse(success=True, data=data)
+
+
+@router.post("/scrape", response_model=SearchResponse)
+async def scrape(req: ScrapeRequest) -> SearchResponse:
+    job_id = await create_job(req.urls, use_playwright=req.use_playwright)
+    results = await get_results(job_id)
+
+    data = [SearchResultItem(url=url, markdown=md) for url, md in results if md]
     return SearchResponse(success=True, data=data)

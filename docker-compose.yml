@@ -31,6 +31,7 @@ services:
       - SCRAPE_TIMEOUT=10
       - CACHE_TTL_PAGE=86400
       - PLAYWRIGHT_URL=http://playwright:3000
+      - PROXY_URL=${PROXY_URL:-}
     depends_on:
       redis:
         condition: service_healthy
@@ -99,9 +100,7 @@ services:
       - MAX_CONCURRENT_PAGES=10
       - TIMEOUT=30000
       - BLOCK_MEDIA=true
-      - PROXY_SERVER=${PROXY_SERVER:-}
-      - PROXY_USERNAME=${PROXY_USERNAME:-}
-      - PROXY_PASSWORD=${PROXY_PASSWORD:-}
+      - PROXY_URL=${PROXY_URL:-}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s

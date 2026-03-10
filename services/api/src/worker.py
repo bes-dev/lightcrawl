@@ -48,7 +48,7 @@ def process_task(task: dict) -> None:
         logger.debug(f"[{job_id}] Cache hit: {url}")
         return
 
-    content = fetch_and_extract(url)
+    content = fetch_and_extract(url, use_playwright=task.get("use_playwright", False))
 
     if not content:
         add_to_dlq(job_id, url, "Empty content", attempt)

@@ -40,6 +40,7 @@ def _get_client() -> httpx.Client:
                     timeout=settings.scrape_timeout,
                     follow_redirects=True,
                     limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+                    proxy=settings.proxy_url or None,
                 )
     return _http_client
 

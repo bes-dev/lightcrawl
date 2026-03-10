@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     scrape_concurrency: int = 50  # per worker
     scrape_timeout: int = 10
     playwright_url: str = ""  # Optional: http://playwright:3000
+    proxy_url: str = ""  # Optional: http://user:pass@host:port
 
     # Job settings
     job_timeout: int = 120  # seconds to wait for all results

@@ -16,3 +16,9 @@ class SearchResponse(BaseModel):
     success: bool
     data: list[SearchResultItem]
     error: str | None = None
+
+
+class ScrapeRequest(BaseModel):
+    urls: list[str] = Field(min_length=1, max_length=100)
+    use_playwright: bool = False
+    timeout: int = Field(default=30000, ge=1000, le=120000)  # ms

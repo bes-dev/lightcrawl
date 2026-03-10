@@ -19,14 +19,9 @@ from src.config import settings
 logger = logging.getLogger(__name__)
 
 
-class JobTimeout(Exception):
-    """Job did not complete in time."""
-    pass
-
-
 # --- Async API (for FastAPI) ---
 
-async def create_job(urls: list[str]) -> str:
+async def create_job(urls: list[str], *, use_playwright: bool = False) -> str:
     """Create scrape job, returns job_id."""
     job_id = str(uuid.uuid4())[:8]
     r = await get_redis()
@@ -40,7 +35,7 @@ async def create_job(urls: list[str]) -> str:
     pipe.expire(f"job:{job_id}:results", ttl)
 
     for url in urls:
-        task = json.dumps({"job_id": job_id, "url": url})
+        task = json.dumps({"job_id": job_id, "url": url, "use_playwright": use_playwright})
         pipe.lpush("job:pending", task)
 
     await pipe.execute()
@@ -49,7 +44,10 @@ async def create_job(urls: list[str]) -> str:
 
 
 async def get_results(job_id: str) -> list[tuple[str, str]]:
-    """Wait for job completion, return [(url, content), ...]."""
+    """Wait for job completion, return [(url, content), ...].
+
+    Returns partial results on timeout instead of raising exception.
+    """
     r = await get_redis()
     deadline = time.time() + settings.job_timeout
 
@@ -57,19 +55,22 @@ async def get_results(job_id: str) -> list[tuple[str, str]]:
     if total == 0:
         return []
 
+    done = 0
     while time.time() < deadline:
         done = await r.hlen(f"job:{job_id}:results")
         if done >= total:
             break
         await asyncio.sleep(settings.job_poll_interval)
-    else:
-        logger.warning(f"Job {job_id} timed out ({done}/{total} completed)")
-        raise JobTimeout(f"Job {job_id} timed out")
 
+    # Get whatever results we have (partial or complete)
     results_raw = await r.hgetall(f"job:{job_id}:results")
     await r.delete(f"job:{job_id}:total", f"job:{job_id}:results")
 
-    logger.info(f"Job {job_id} completed: {len(results_raw)} results")
+    if done < total:
+        logger.warning(f"Job {job_id} timed out ({done}/{total} completed), returning partial results")
+    else:
+        logger.info(f"Job {job_id} completed: {len(results_raw)} results")
+
     return [(url, content) for url, content in results_raw.items()]
 
 
