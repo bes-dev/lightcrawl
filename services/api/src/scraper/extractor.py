@@ -1,3 +1,4 @@
+import json
 import logging
 import random
 import threading
@@ -6,6 +7,7 @@ from urllib.parse import urlparse
 
 import httpx
 import trafilatura
+from lxml import html as lxml_html
 
 from src.config import settings
 
@@ -146,9 +148,54 @@ def fetch_with_playwright(url: str, wait_after_load: int = 2000) -> str:
     return ""
 
 
+MIN_CONTENT_LENGTH = 500
+
+
 def extract_content(html: str) -> str:
-    """Extract markdown from HTML."""
-    return trafilatura.extract(html, include_tables=True, output_format="markdown") or ""
+    """Extract markdown from HTML. Falls back to JSON-LD articleBody if trafilatura returns too little."""
+    result = trafilatura.extract(html, include_tables=True, output_format="markdown") or ""
+    if len(result) >= MIN_CONTENT_LENGTH:
+        return result
+
+    ld_content = _extract_jsonld_body(html)
+    if ld_content and len(ld_content) > len(result):
+        return ld_content
+
+    return result
+
+
+def _extract_jsonld_body(html: str) -> str:
+    """Extract articleBody from Schema.org JSON-LD structured data."""
+    try:
+        tree = lxml_html.fromstring(html)
+    except Exception:
+        return ""
+
+    for script in tree.xpath('//script[@type="application/ld+json"]'):
+        try:
+            data = json.loads(script.text_content())
+            body = _find_article_body(data)
+            if body and len(body) > MIN_CONTENT_LENGTH:
+                return body
+        except (json.JSONDecodeError, TypeError):
+            continue
+    return ""
+
+
+def _find_article_body(data) -> str:
+    if isinstance(data, dict):
+        if "articleBody" in data:
+            return data["articleBody"]
+        for v in data.values():
+            result = _find_article_body(v)
+            if result:
+                return result
+    elif isinstance(data, list):
+        for item in data:
+            result = _find_article_body(item)
+            if result:
+                return result
+    return ""
 
 
 def close_client() -> None:
