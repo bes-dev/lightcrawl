@@ -43,8 +43,6 @@ services:
     image: searxng/searxng:latest
     volumes:
       - ./config/searxng:/etc/searxng
-    depends_on:
-      - tor
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/healthz"]
       interval: 30s
@@ -66,6 +64,8 @@ services:
 
   tor:
     image: dperson/torproxy:latest
+    profiles:
+      - tor
     restart: unless-stopped
 
   # Optional: MCP server for remote LLM access (Claude Desktop, Cursor, etc.)
